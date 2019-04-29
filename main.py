@@ -43,11 +43,11 @@ def train():
 
     ###====================== PRE-LOAD DATA ===========================###
     train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.jpg', printable=False))
-    train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.jpg', printable=False))
-    valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.jpg', printable=False))
-    valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.jpg', printable=False))
-    final_hr_img_list_4 = sorted(tl.files.load_file_list(path=config.FINAL.hr_img_path_4, regx='.*.png', printable=False))
-    final_lr_img_list_4 = sorted(tl.files.load_file_list(path=config.FINAL.lr_img_path_4, regx='.*.png', printable=False))
+    #train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.jpg', printable=False))
+    #valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.jpg', printable=False))
+    #valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.jpg', printable=False))
+    #final_hr_img_list_4 = sorted(tl.files.load_file_list(path=config.FINAL.hr_img_path_4, regx='.*.png', printable=False))
+    #final_lr_img_list_4 = sorted(tl.files.load_file_list(path=config.FINAL.lr_img_path_4, regx='.*.png', printable=False))
     final_hr_img_list_6 = sorted(tl.files.load_file_list(path=config.FINAL.hr_img_path_6, regx='.*.png', printable=False))
     final_lr_img_list_6 = sorted(tl.files.load_file_list(path=config.FINAL.lr_img_path_6, regx='.*.png', printable=False))
 
