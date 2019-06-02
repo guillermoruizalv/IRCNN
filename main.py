@@ -42,17 +42,18 @@ def train():
     tl.files.exists_or_mkdir(checkpoint_dir)
 
     ###====================== PRE-LOAD DATA ===========================###
-    train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.jpg', printable=False))
-    #train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.jpg', printable=False))
-    #valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.jpg', printable=False))
-    #valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.jpg', printable=False))
-    #final_hr_img_list_4 = sorted(tl.files.load_file_list(path=config.FINAL.hr_img_path_4, regx='.*.png', printable=False))
-    #final_lr_img_list_4 = sorted(tl.files.load_file_list(path=config.FINAL.lr_img_path_4, regx='.*.png', printable=False))
-    final_hr_img_list_6 = sorted(tl.files.load_file_list(path=config.FINAL.hr_img_path_6, regx='.*.png', printable=False))
-    final_lr_img_list_6 = sorted(tl.files.load_file_list(path=config.FINAL.lr_img_path_6, regx='.*.png', printable=False))
+    train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))
+    valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
 
+    # Load training data
     train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=16)
+    pre_b_imgs_hr = tl.prepro.threading_data(train_hr_imgs, fn=normalize_img, is_random=True)
+    pre_b_imgs_lr = tl.prepro.threading_data(train_hr_imgs, fn=normalize_img_add_noise, noiseRatio=0.6)
 
+    # Load validation data
+    valid_hr_imgs = tl.vis.read_images(valid_hr_img_list, path=config.VALID.hr_img_path, n_threads=16)
+    sample_imgs_hr = tl.prepro.threading_data(valid_hr_imgs, fn=normalize_img, is_random=False)
+    sample_imgs_lr = tl.prepro.threading_data(valid_hr_imgs, fn=normalize_img_add_noise, noiseRatio=0.6)
 
     ###========================== DEFINE MODEL ============================###
     ## train inference
@@ -85,27 +86,23 @@ def train():
     else:
         print('There is no checkpoint, do not load the model.\n')
     
-
     ###============================= TRAINING ===============================###
 
-    final_hr_imgs = tl.vis.read_images(final_hr_img_list_6, path=config.FINAL.hr_img_path_6, n_threads=16)
-    sample_imgs_hr = tl.prepro.threading_data(final_hr_imgs, fn=normalize_img_noresize, is_random=False)
-    print('final HR sub-image:', sample_imgs_hr.shape, sample_imgs_hr.min(), sample_imgs_hr.max())
-    final_lr_imgs = tl.vis.read_images(final_lr_img_list_6, path=config.FINAL.lr_img_path_6, n_threads=16)
-    sample_imgs_lr = tl.prepro.threading_data(final_lr_imgs, fn=normalize_img_noresize, is_random=False)
-    print('final LR sub-image:', sample_imgs_lr.shape, sample_imgs_lr.min(), sample_imgs_lr.max())
-
-    tl.vis.save_images(sample_imgs_lr, [1, 1], save_dir_ircnn + '/_final_sample_lr.jpg')
-    tl.vis.save_images(sample_imgs_hr, [1, 1], save_dir_ircnn + '/_final_sample_hr.jpg')
+    #for i,hr_img in zip(range(len(sample_imgs_hr)), sample_imgs_hr):
+    #    tl.vis.save_image(hr_img, save_dir_ircnn + '/_final_sample_hr_{}.jpg'.format(i))
+    #
+    #for i,lr_img in zip(range(len(sample_imgs_lr)), sample_imgs_lr):
+    #    tl.vis.save_image(lr_img, save_dir_ircnn + '/_final_sample_lr_{}.jpg'.format(i))
 
     ### ========================= train IRCNN ========================= ###
 
+    print ("[*] Setting up validation.")
     err_final, out = sess.run([loss,net_test.outputs], {t_image: sample_imgs_lr, t_target_image: sample_imgs_hr})  
     logging.debug("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(0, n_epoch, err_final))
-    print ("[*] save images")
-    tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/train_%d.png' % 0)
+    #print ("[*] save images")
+    #tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/train_%d.png' % 0)
 
-
+    print ("[*] Training starts.")
     for epoch in range(0, n_epoch + 1):
         ## update learning rate
         if epoch != 0 and (epoch % decay_every == 0):
@@ -121,11 +118,11 @@ def train():
         epoch_time = time.time()
         total_loss, n_iter = 0, 0
 
-        ## If your machine have enough memory, please pre-load the whole train set.
+        ## Images preloaded the whole train set.
         for idx in range(0, len(train_hr_imgs), batch_size):
             step_time = time.time()
-            b_imgs_hr = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=normalize_img, is_random=True)
-            b_imgs_lr = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=normalize_img_add_noise, noiseRatio=0.6)
+            b_imgs_hr = pre_b_imgs_hr[idx:idx + batch_size]
+            b_imgs_lr = pre_b_imgs_lr[idx:idx + batch_size]
             ## update IRCNN
             err, out, _ = sess.run([loss, net.outputs, optim], {t_image: b_imgs_lr, t_target_image: b_imgs_hr})
 
@@ -138,12 +135,14 @@ def train():
                                                                                 total_loss / n_iter)
         print(log)
 
-        ## quick evaluation on final set
-        if (epoch != 0) and (epoch % 5 == 0):
-            err_final, out = sess.run([loss,net_test.outputs], {t_image: sample_imgs_lr, t_target_image: sample_imgs_hr})  
-            logging.debug("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(epoch, n_epoch, err_final))
-            print("[*] save images")
-            tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/train_%d.png' % epoch)
+        ## Validation
+        #if (epoch != 0) and (epoch % 5 == 0):
+        print ("[*] Validation.")
+        err_final, out = sess.run([loss,net_test.outputs], {t_image: sample_imgs_lr, t_target_image: sample_imgs_hr})  
+        logging.debug("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(epoch, n_epoch, err_final))
+        print("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(epoch, n_epoch, err_final))
+        #print("[*] save images")
+        #tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/train_%d.png' % epoch)
 
         ## save model
         if (epoch != 0) and (epoch % 5 == 0):

@@ -18,11 +18,10 @@ config.TRAIN.decay_every = int(config.TRAIN.n_epoch / 2)
 config.TRAIN.hr_img_path = '/home/rual/workspace/master/tfm/git_clones/restore/nets/IRCNN/Train'
 # config.TRAIN.lr_img_path = '/home/manyz/dataset/IRCNN/IRCNN_train/lr_images/'
 
-# config.VALID = edict()
-## test set location
-# config.VALID.hr_img_path = '/home/manyz/dataset/IRCNN/IRCNN_test/hr_images/'
+## validation set location
+config.VALID = edict()
+config.VALID.hr_img_path = '/home/rual/workspace/master/tfm/git_clones/restore/nets/IRCNN/Validation'
 # config.VALID.lr_img_path = '/home/manyz/dataset/IRCNN/IRCNN_test/lr_images/'
-
 
 # config.FINAL = edict()
 # finally needed images
