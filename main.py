@@ -146,7 +146,7 @@ def train():
 
         ## save model
         if (epoch != 0) and (epoch % 5 == 0):
-            tl.files.save_npz(net.all_params, name=checkpoint_dir + '/{}.npz'.format(tl.global_flag['mode']), sess=sess)
+            tl.files.save_npz(net.all_params, name=checkpoint_dir + '/{}_{}.npz'.format(tl.global_flag['mode'], epoch), sess=sess)
 
 
 def evaluate():
