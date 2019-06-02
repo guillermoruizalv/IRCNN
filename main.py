@@ -96,7 +96,7 @@ def train():
 
     ### ========================= train IRCNN ========================= ###
 
-    print ("[*] Setting up validation.")
+    print ("[*] First validation.")
     err_final, out = sess.run([loss,net_test.outputs], {t_image: sample_imgs_lr, t_target_image: sample_imgs_hr})  
     logging.debug("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(0, n_epoch, err_final))
     #print ("[*] save images")
