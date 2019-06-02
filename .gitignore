@@ -1,2 +1,6 @@
 checkpoint
+demo/
+final_image/
+samples/
+train_info.log
 __pycache__
