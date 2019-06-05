@@ -12,7 +12,7 @@ from model import IRCNN
 from utils import *
 from config import config, log_config
 
-os.environ["CUDA_VISIBLE_DEVICES"]= '1'
+#os.environ["CUDA_VISIBLE_DEVICES"]= '1'
 
 ###====================== HYPER-PARAMETERS ===========================###
 ## Adam
@@ -42,15 +42,17 @@ def train():
     tl.files.exists_or_mkdir(checkpoint_dir)
 
     ###====================== PRE-LOAD DATA ===========================###
+    print ("Preloading data")
     train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))
     valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
+    print ("Found {} images for training and {} images for validation".format(len(train_hr_img_list), len(valid_hr_img_list)))
 
     # Load training data
+    print ("Loading training metadata")
     train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=16)
-    pre_b_imgs_hr = tl.prepro.threading_data(train_hr_imgs, fn=normalize_img, is_random=True)
-    pre_b_imgs_lr = tl.prepro.threading_data(train_hr_imgs, fn=normalize_img_add_noise, noiseRatio=0.6)
 
     # Load validation data
+    print ("Loading validation data")
     valid_hr_imgs = tl.vis.read_images(valid_hr_img_list, path=config.VALID.hr_img_path, n_threads=16)
     sample_imgs_hr = tl.prepro.threading_data(valid_hr_imgs, fn=normalize_img, is_random=False)
     sample_imgs_lr = tl.prepro.threading_data(valid_hr_imgs, fn=normalize_img_add_noise, noiseRatio=0.6)
@@ -121,8 +123,8 @@ def train():
         ## Images preloaded the whole train set.
         for idx in range(0, len(train_hr_imgs), batch_size):
             step_time = time.time()
-            b_imgs_hr = pre_b_imgs_hr[idx:idx + batch_size]
-            b_imgs_lr = pre_b_imgs_lr[idx:idx + batch_size]
+            b_imgs_hr = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=normalize_img, is_random=True)
+            b_imgs_lr = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=normalize_img_add_noise, noiseRatio=0.6)
             ## update IRCNN
             err, out, _ = sess.run([loss, net.outputs, optim], {t_image: b_imgs_lr, t_target_image: b_imgs_hr})
 
@@ -145,8 +147,8 @@ def train():
         #tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/train_%d.png' % epoch)
 
         ## save model
-        if (epoch != 0) and (epoch % 5 == 0):
-            tl.files.save_npz(net.all_params, name=checkpoint_dir + '/{}_{}.npz'.format(tl.global_flag['mode'], epoch), sess=sess)
+        if (epoch != 0) and (epoch % 10 == 0):
+            tl.files.save_npz(net.all_params, name=checkpoint_dir + '/{}.npz'.format(tl.global_flag['mode']), sess=sess)
 
 
 def evaluate():
