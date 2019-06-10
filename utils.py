@@ -31,3 +31,16 @@ def normalize_img_add_noise(Img, noiseRatio):
     corrImg = corrImg / (255. / 2.)
     corrImg = corrImg - 1.
     return corrImg
+
+def add_noise(Img, noiseRatio):
+    rows, cols, channels = Img.shape
+    noiseMask = np.ones((rows, cols, channels))
+    subNoiseNum = round(noiseRatio * cols)
+    for k in range(channels):
+        for i in range(rows):
+            tmp = np.random.permutation(cols)
+            noiseIdx = np.array(tmp[:subNoiseNum])
+            noiseMask[i, noiseIdx, k] = 0
+    corrImg = Img * noiseMask
+    return corrImg
+

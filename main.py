@@ -1,6 +1,7 @@
 #! /usr/bin/python
 
 import os, time, pickle, random, time
+import glob
 from datetime import datetime
 import numpy as np
 from time import localtime, strftime
@@ -158,33 +159,50 @@ def evaluate():
     checkpoint_dir = "checkpoint"
 
     ###====================== PRE-LOAD DATA ===========================###
-    valid_lr_img_list = ["demo/B.png"]
+    data_dir = os.path.join(os.getcwd(), config.TEST.dir)
+    data = sorted(glob.glob(os.path.join(data_dir, "*.bmp")))
+    valid_lr_img_list = data
     valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path='.', n_threads=32)
 
-    ###========================== DEFINE MODEL ============================###
-    valid_lr_img = valid_lr_imgs[0]
-    valid_lr_img = (valid_lr_img / 127.5) - 1 
-    rols, cols, channels = valid_lr_img.shape
-    valid_lr_img = np.reshape(valid_lr_img, (1, rols, cols, channels))
     t_image = tf.placeholder('float32', [1, None, None, 3], name='input_image')
-
     net = IRCNN(t_image, is_train=False, reuse=False)
+    ###========================== DEFINE MODEL ============================###
+    for orig_path, valid_lr_img in zip(data, valid_lr_imgs):
+        print ("Processing {}".format(os.path.basename(orig_path)))
+        valid_lr_img = (valid_lr_img / 127.5) - 1 
+        rols, cols, channels = valid_lr_img.shape
+        valid_lr_img = np.reshape(valid_lr_img, (1, rols, cols, channels))
+        ###===================== RESTORE IRCNN AND TEST =========================###
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+        tl.layers.initialize_global_variables(sess)
+        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/ircnn.npz', network=net)
 
-    ###===================== RESTORE IRCNN AND TEST =========================###
-    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    tl.layers.initialize_global_variables(sess)
-    tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/ircnn.npz', network=net)
+        out = sess.run(net.outputs, {t_image: valid_lr_img})  
+        print("[*] save images")
+        tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/{}.png'.format(os.path.basename(orig_path)))
 
-    out = sess.run(net.outputs, {t_image: valid_lr_img})  
-    print("[*] save images")
-    tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/final.png')
+def add_noise_to_dataset():
+    # Create noise dir
+    noise_dir_ircnn = "noise"
+    print ("Creating {}".format(noise_dir_ircnn))
+    tl.files.exists_or_mkdir(noise_dir_ircnn)
 
+    # Load images
+    data_dir = os.path.join(os.getcwd(), config.TEST.dir)
+    data = sorted(glob.glob(os.path.join(data_dir, "*.bmp")))
+    valid_hr_imgs = tl.vis.read_images(data, path='.', n_threads=32)
+
+    # Add noise
+    for orig_path, valid_hr_img in zip(data, valid_hr_imgs):
+        print ("Adding noise to {}".format(os.path.basename(orig_path)))
+        valid_lr_img = add_noise(valid_hr_img, 0.6)
+        tl.vis.save_image(valid_lr_img, noise_dir_ircnn + '/{}'.format(os.path.basename(orig_path)))
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--mode', type=str, default='ircnn', help='ircnn, evaluate')
+    parser.add_argument('--mode', type=str, default='ircnn', help='ircnn, eval')
 
     args = parser.parse_args()
 
@@ -194,5 +212,7 @@ if __name__ == '__main__':
         train()
     elif tl.global_flag['mode'] == 'eval':
         evaluate()
+    elif tl.global_flag['mode'] == 'noise':
+        add_noise_to_dataset()
     else:
         raise Exception("Unknown --mode")

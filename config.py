@@ -21,6 +21,10 @@ config.TRAIN.hr_img_path = '/home/guillermoruizalvarez/workspace/restore/nets/IR
 config.VALID = edict()
 config.VALID.hr_img_path = '/home/guillermoruizalvarez/workspace/restore/nets/IRCNN/Validation'
 
+# Test location
+config.TEST = edict()
+config.TEST.dir = "/home/rual/workspace/master/tfm/git_clones/restore/nets/IRCNN/noise"
+
 def log_config(filename, cfg):
     with open(filename, 'w') as f:
         f.write("================================================\n")
