@@ -179,24 +179,7 @@ def evaluate():
 
         out = sess.run(net.outputs, {t_image: valid_lr_img})  
         print("[*] save images")
-        tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/{}.png'.format(os.path.basename(orig_path)))
-
-def add_noise_to_dataset():
-    # Create noise dir
-    noise_dir_ircnn = "noise"
-    print ("Creating {}".format(noise_dir_ircnn))
-    tl.files.exists_or_mkdir(noise_dir_ircnn)
-
-    # Load images
-    data_dir = os.path.join(os.getcwd(), config.TEST.dir)
-    data = sorted(glob.glob(os.path.join(data_dir, "*.bmp")))
-    valid_hr_imgs = tl.vis.read_images(data, path='.', n_threads=32)
-
-    # Add noise
-    for orig_path, valid_hr_img in zip(data, valid_hr_imgs):
-        print ("Adding noise to {}".format(os.path.basename(orig_path)))
-        valid_lr_img = add_noise(valid_hr_img, 0.6)
-        tl.vis.save_image(valid_lr_img, noise_dir_ircnn + '/{}'.format(os.path.basename(orig_path)))
+        tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/{}'.format(os.path.basename(orig_path)))
 
 if __name__ == '__main__':
     import argparse
@@ -212,7 +195,5 @@ if __name__ == '__main__':
         train()
     elif tl.global_flag['mode'] == 'eval':
         evaluate()
-    elif tl.global_flag['mode'] == 'noise':
-        add_noise_to_dataset()
     else:
         raise Exception("Unknown --mode")
