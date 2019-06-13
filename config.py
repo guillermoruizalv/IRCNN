@@ -23,7 +23,7 @@ config.VALID.hr_img_path = '/home/guillermoruizalvarez/workspace/restore/nets/IR
 
 # Test location
 config.TEST = edict()
-config.TEST.dir = "/home/rual/workspace/master/tfm/git_clones/restore/nets/IRCNN/noise"
+config.TEST.dir = "/home/rual/workspace/master/tfm/git_clones/restore/nets/IRCNN/Test"
 
 def log_config(filename, cfg):
     with open(filename, 'w') as f:
