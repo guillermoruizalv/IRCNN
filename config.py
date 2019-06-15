@@ -9,24 +9,23 @@ config.TRAIN.batch_size = 8
 config.TRAIN.lr_init = 1e-4
 config.TRAIN.beta1 = 0.9
 
-## learning IRCNN
+## IRCNN
 config.TRAIN.n_epoch = 2000
 config.TRAIN.lr_decay = 0.05
 config.TRAIN.decay_every = int(config.TRAIN.n_epoch / 2)
 
-## train set location
-config.TRAIN.hr_img_path = '/home/guillermoruizalvarez/workspace/restore/nets/IRCNN/Train'
+## More options
+config.checkpoint_dir = "checkpoint"
+config.results_dir = "results"
 
-## validation set location
+## Train HR
+config.TRAIN.hr_img_path = '/home/rual/workspace/master/tfm/git_clones/restore/datasets/Train'
+
+## Validation
 config.VALID = edict()
-config.VALID.hr_img_path = '/home/guillermoruizalvarez/workspace/restore/nets/IRCNN/Validation'
+config.VALID.hr_img_path = '/home/rual/workspace/master/tfm/git_clones/restore/datasets/Validation'
 
-# Test location
+## Test
 config.TEST = edict()
-config.TEST.dir = "/home/rual/workspace/master/tfm/git_clones/restore/nets/IRCNN/Test"
+config.TEST.dir = '/home/rual/workspace/master/tfm/git_clones/restore/datasets/Test'
 
-def log_config(filename, cfg):
-    with open(filename, 'w') as f:
-        f.write("================================================\n")
-        f.write(json.dumps(cfg, indent=4))
-        f.write("\n================================================\n")

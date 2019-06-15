@@ -1,123 +1,107 @@
-#! /usr/bin/python
+import os, time, pickle, random, time, glob
+import argparse
 
-import os, time, pickle, random, time
-import glob
-from datetime import datetime
 import numpy as np
+import scipy
+
+from datetime import datetime
 from time import localtime, strftime
-import logging, scipy
 
 import tensorflow as tf
 import tensorlayer as tl
+
 from model import IRCNN
+from config import config
 from utils import *
-from config import config, log_config
 
-#os.environ["CUDA_VISIBLE_DEVICES"]= '1'
-
-###====================== HYPER-PARAMETERS ===========================###
 ## Adam
 batch_size = config.TRAIN.batch_size
 lr_init = config.TRAIN.lr_init
 beta1 = config.TRAIN.beta1
-## learning IRCNN
+
+## IRCNN
 n_epoch = config.TRAIN.n_epoch
 lr_decay = config.TRAIN.lr_decay
 decay_every = config.TRAIN.decay_every
 
-ni = int(np.sqrt(batch_size))
-
+## More config
+checkpoint_dir = config.checkpoint_dir
+results_dir = config.results_dir
 
 def train():
-    logging.basicConfig(level=logging.DEBUG,
-                        filename='train_info.log',
-                        filemode='w',
-                        format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'
-                        )
-    # create folders to save tested result images
-    save_dir_ircnn = "samples/{}_ircnn".format(tl.global_flag['mode'])
-    tl.files.exists_or_mkdir(save_dir_ircnn)
-    save_dir_ircnn_train = "samples/train_{}".format(tl.global_flag['mode'])
-    tl.files.exists_or_mkdir(save_dir_ircnn_train)
-    checkpoint_dir = "checkpoint"  # checkpoint
+    # Create checkpoint dir if not existing
     tl.files.exists_or_mkdir(checkpoint_dir)
 
     ###====================== PRE-LOAD DATA ===========================###
     print ("Preloading data")
-    train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))
-    valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
+    train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx=".*", printable=False))
+    valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx=".*", printable=False))
     print ("Found {} images for training and {} images for validation".format(len(train_hr_img_list), len(valid_hr_img_list)))
 
+    # Stop if data was not found
+    if len(train_hr_img_list) == 0 or len(valid_hr_img_list) == 0:
+        return
+
     # Load training data
-    print ("Loading training metadata")
+    print ("Loading training data")
     train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=16)
 
     # Load validation data
     print ("Loading validation data")
-    valid_hr_imgs = tl.vis.read_images(valid_hr_img_list, path=config.VALID.hr_img_path, n_threads=16)
-    sample_imgs_hr = tl.prepro.threading_data(valid_hr_imgs, fn=normalize_img, is_random=False)
-    sample_imgs_lr = tl.prepro.threading_data(valid_hr_imgs, fn=normalize_img_add_noise, noiseRatio=0.6)
+    valid_hr_img_list = tl.vis.read_images(valid_hr_img_list, path=config.VALID.hr_img_path, n_threads=16)
+    valid_hr_imgs = tl.prepro.threading_data(valid_hr_img_list, fn=normalize_img, is_random=False)
+    valid_lr_imgs = tl.prepro.threading_data(valid_hr_img_list, fn=normalize_img_add_noise, noiseRatio=0.6)
 
     ###========================== DEFINE MODEL ============================###
-    ## train inference
+    ## Train model
     t_image = tf.placeholder('float32', [None, None, None, 3], name='t_image')
     t_target_image = tf.placeholder('float32', [None, None, None, 3], name='t_target_image')
 
     net = IRCNN(t_image, is_train=True, reuse=False)
-
     net.print_params(False)
     net.print_layers()
 
-    ## test inference
+    ## Test model
     net_test = IRCNN(t_image, is_train=False, reuse=True)
 
-    # ###========================== DEFINE TRAIN OPS ==========================###
+    ###========================== DEFINE TRAIN OPS ==========================###
     loss = tl.cost.mean_squared_error(net.outputs, t_target_image, is_mean=True)
-
     net_vars = tl.layers.get_variables_with_name('IRCNN', True, True)
-
     with tf.variable_scope('learning_rate'):
         lr_v = tf.Variable(lr_init, trainable=False)
+
     ## IRCNN
     optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(loss, var_list=net_vars)
 
     ###========================== RESTORE MODEL =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     tl.layers.initialize_global_variables(sess)
-    if tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/{}.npz'.format(tl.global_flag['mode']), network=net) is True:
-        print('Load Last Checkpoint to IRCNN Model.\n')
+
+    ## Checkpoint path
+    checkpoint_path = os.path.join(checkpoint_dir, "{}.npz".format(tl.global_flag['mode']))
+    if tl.files.load_and_assign_npz(sess=sess, name=checkpoint_path, network=net) is False:
+        print('Checkpoint load: FAILED')
     else:
-        print('There is no checkpoint, do not load the model.\n')
+        print('Checkpoint load: SUCCESS')
     
     ###============================= TRAINING ===============================###
 
-    #for i,hr_img in zip(range(len(sample_imgs_hr)), sample_imgs_hr):
-    #    tl.vis.save_image(hr_img, save_dir_ircnn + '/_final_sample_hr_{}.jpg'.format(i))
-    #
-    #for i,lr_img in zip(range(len(sample_imgs_lr)), sample_imgs_lr):
-    #    tl.vis.save_image(lr_img, save_dir_ircnn + '/_final_sample_lr_{}.jpg'.format(i))
-
-    ### ========================= train IRCNN ========================= ###
-
-    print ("[*] First validation.")
-    err_final, out = sess.run([loss,net_test.outputs], {t_image: sample_imgs_lr, t_target_image: sample_imgs_hr})  
-    logging.debug("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(0, n_epoch, err_final))
-    #print ("[*] save images")
-    #tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/train_%d.png' % 0)
+    print ("[*] Initialize validation network.")
+    err_final, out = sess.run([loss,net_test.outputs], {t_image: valid_lr_imgs, t_target_image: valid_hr_imgs})  
+    print ("[*] Epoch: [{}], MSE on validation [{}]".format(0, err_final))
 
     print ("[*] Training starts.")
     for epoch in range(0, n_epoch + 1):
-        ## update learning rate
+        ## Update learning rate
         if epoch != 0 and (epoch % decay_every == 0):
-            new_lr_decay = lr_decay**(epoch // decay_every)
+            new_lr_decay = lr_decay ** (epoch // decay_every)
             sess.run(tf.assign(lr_v, lr_init * new_lr_decay))
-            log = " ** new learning rate: %f " % (lr_init * new_lr_decay)
-            print(log)
+            print("[*] New learning rate: {}".format(lr_init * new_lr_decay))
         elif epoch == 0:
             sess.run(tf.assign(lr_v, lr_init))
-            log = " ** init lr: %f  decay_every_init: %d, lr_decay: %f (for GAN)" % (lr_init, decay_every, lr_decay)
-            print(log)
+            print("[*] Init learning rate: {}, decay_every_init: {}, lr_decay: {} (for GAN)".format(lr_init, decay_every, lr_decay))
 
+        ## Parameters
         epoch_time = time.time()
         total_loss, n_iter = 0, 0
 
@@ -129,71 +113,76 @@ def train():
             ## update IRCNN
             err, out, _ = sess.run([loss, net.outputs, optim], {t_image: b_imgs_lr, t_target_image: b_imgs_hr})
 
-            print("Epoch [%2d/%2d] %4d time: %4.4fs, loss: %.8f" %
-                  (epoch, n_epoch, n_iter, time.time() - step_time, err))
+            print("[*] Epoch [{}/{}] {} time: {}, loss: {}".format(epoch, n_epoch, n_iter, time.time() - step_time, err))
             total_loss += err
             n_iter += 1
 
-        log = "[*] Epoch: [%2d/%2d] time: %4.4fs, loss: %.8f" % (epoch, n_epoch, time.time() - epoch_time, 
-                                                                                total_loss / n_iter)
-        print(log)
+        print("[*] Epoch: [{}/{}] epoch time: {}, time: {}, loss: {}".format(epoch, n_epoch, time.time() - epoch_time,
+            time.time(), total_loss / n_iter))
 
         ## Validation
-        #if (epoch != 0) and (epoch % 5 == 0):
         print ("[*] Validation.")
-        err_final, out = sess.run([loss,net_test.outputs], {t_image: sample_imgs_lr, t_target_image: sample_imgs_hr})  
-        logging.debug("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(epoch, n_epoch, err_final))
-        print("[*] Epoch: [%2d/%2d], Square Error on noise 0.6 is %f" %(epoch, n_epoch, err_final))
-        #print("[*] save images")
-        #tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/train_%d.png' % epoch)
+        err_final, out = sess.run([loss,net_test.outputs], {t_image: valid_lr_imgs, t_target_image: valid_hr_imgs})  
+        print("[*] Epoch: [{}/{}], MSE on validation {}".format(epoch, n_epoch, err_final))
 
-        ## save model
+        ## Save model
         if (epoch != 0) and (epoch % 10 == 0):
-            tl.files.save_npz(net.all_params, name=checkpoint_dir + '/{}.npz'.format(tl.global_flag['mode']), sess=sess)
+            tl.files.save_npz(net.all_params, name=checkpoint_path, sess=sess)
 
 
 def evaluate():
-    ## create folders to save result images
-    save_dir_ircnn = "final_image"
-    tl.files.exists_or_mkdir(save_dir_ircnn)
-    checkpoint_dir = "checkpoint"
+    ## Create folders to save result images
+    tl.files.exists_or_mkdir(results_dir)
+
+    ## Checkpoint path
+    checkpoint_path = os.path.join(checkpoint_dir, "ircnn.npz")
 
     ###====================== PRE-LOAD DATA ===========================###
-    data_dir = os.path.join(os.getcwd(), config.TEST.dir)
-    data = sorted(glob.glob(os.path.join(data_dir, "*.bmp")))
-    valid_lr_img_list = data
-    valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path='.', n_threads=32)
+    test_lr_img_list = sorted(tl.files.load_file_list(path=config.TEST.dir, regx=".*", printable=False))
+    print ("Found {} images for test".format(len(test_lr_img_list)))
 
+    # Stop if data was not found
+    if len(test_lr_img_list) == 0:
+        return
+
+    # Load images
+    test_lr_imgs = tl.vis.read_images(test_lr_img_list, path=config.TEST.dir, n_threads=16)
+
+    # Prepare net
     t_image = tf.placeholder('float32', [1, None, None, 3], name='input_image')
     net = IRCNN(t_image, is_train=False, reuse=False)
+    
     ###========================== DEFINE MODEL ============================###
-    for orig_path, valid_lr_img in zip(data, valid_lr_imgs):
-        print ("Processing {}".format(os.path.basename(orig_path)))
-        valid_lr_img = (valid_lr_img / 127.5) - 1 
-        rols, cols, channels = valid_lr_img.shape
-        valid_lr_img = np.reshape(valid_lr_img, (1, rols, cols, channels))
-        ###===================== RESTORE IRCNN AND TEST =========================###
+    for test_lr_img_path, test_lr_img in zip(test_lr_img_list, test_lr_imgs):
+        print ("Processing {}".format(os.path.basename(test_lr_img_path)))
+
+        ## Normalize and reshape
+        test_lr_img = (test_lr_img / 127.5) - 1 
+        rols, cols, channels = test_lr_img.shape
+        test_lr_img = np.reshape(test_lr_img, (1, rols, cols, channels))
+
+        ###===================== RESTORE IRCNN =========================###
         sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
         tl.layers.initialize_global_variables(sess)
-        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/ircnn.npz', network=net)
+        tl.files.load_and_assign_npz(sess=sess, name=checkpoint_path, network=net)
 
-        out = sess.run(net.outputs, {t_image: valid_lr_img})  
-        print("[*] save images")
-        tl.vis.save_images(out, [1, 1], save_dir_ircnn + '/{}'.format(os.path.basename(orig_path)))
+        ###===================== TEST NET =====================###
+        out = sess.run(net.outputs, {t_image: test_lr_img})
+
+        ## Save image
+        print("[*] Save image")
+        tl.vis.save_image(out[0], os.path.join(results_dir,'{}'.format(os.path.basename(test_lr_img_path))))
 
 if __name__ == '__main__':
-    import argparse
+    # Parse arguments
     parser = argparse.ArgumentParser()
-
-    parser.add_argument('--mode', type=str, default='ircnn', help='ircnn, eval')
-
+    parser.add_argument('--mode', type=str, choices=['ircnn','eval'], default='ircnn')
     args = parser.parse_args()
 
+    # Set tl global flag
     tl.global_flag['mode'] = args.mode
 
     if tl.global_flag['mode'] == 'ircnn':
         train()
-    elif tl.global_flag['mode'] == 'eval':
-        evaluate()
     else:
-        raise Exception("Unknown --mode")
+        evaluate()
